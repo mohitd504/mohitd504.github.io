@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Mohit's 100-Day Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background: #0f172a; font-family: 'Segoe UI', sans-serif; }
+  .glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+  .tab-btn.active { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; }
+  .tab-btn { transition: all 0.2s; }
+  .input-field { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.15); color: white; border-radius: 8px; padding: 8px 12px; width: 100%; outline: none; }
+  .input-field:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.3); }
+  .input-field::placeholder { color: rgba(255,255,255,0.3); }
+  .btn-primary { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 10px 24px; border-radius: 10px; font-weight: 600; transition: all 0.2s; cursor: pointer; border: none; }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 25px rgba(99,102,241,0.4); }
+  .btn-success { background: linear-gradient(135deg, #10b981, #059669); color: white; padding: 10px 24px; border-radius: 10px; font-weight: 600; transition: all 0.2s; cursor: pointer; border: none; }
+  .btn-success:hover { transform: translateY(-1px); box-shadow: 0 8px 25px rgba(16,185,129,0.4); }
+  .progress-bar { height: 8px; border-radius: 99px; background: rgba(255,255,255,0.1); overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 99px; transition: width 0.6s ease; }
+  .meal-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+  .stat-card { background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.15)); border: 1px solid rgba(99,102,241,0.3); border-radius: 16px; padding: 20px; }
+  .tag { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 600; }
+  select.input-field option { background: #1e293b; }
+  .study-entry { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
+  ::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.5); border-radius: 3px; }
+  .upload-zone { border: 2px dashed rgba(99,102,241,0.5); border-radius: 16px; padding: 48px; text-align: center; cursor: pointer; transition: all 0.2s; }
+  .upload-zone:hover { border-color: #6366f1; background: rgba(99,102,241,0.05); }
+  .notification { position: fixed; top: 20px; right: 20px; padding: 14px 20px; border-radius: 12px; font-weight: 600; z-index: 1000; animation: slideIn 0.3s ease; }
+  @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+</style>
+</head>
+<body class="min-h-screen text-white">
+
+<!-- UPLOAD SCREEN -->
+<div id="uploadScreen" class="min-h-screen flex items-center justify-center p-6">
+  <div class="max-w-md w-full">
+    <div class="text-center mb-10">
+      <div class="text-5xl mb-4">🏆</div>
+      <h1 class="text-3xl font-bold text-white mb-2">100-Day Tracker</h1>
+      <p class="text-slate-400">Upload your Excel tracker to get started</p>
+    </div>
+    <div class="glass rounded-2xl p-8">
+      <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+        <div class="text-4xl mb-3">📂</div>
+        <p class="text-white font-semibold mb-1">Click to upload Excel file</p>
+        <p class="text-slate-400 text-sm">Supports .xlsx files — drop your tracker here</p>
+        <input type="file" id="fileInput" accept=".xlsx,.xls" class="hidden" onchange="loadFile(this)"/>
+      </div>
+      <div id="uploadError" class="hidden mt-4 text-red-400 text-sm text-center"></div>
+    </div>
+    <p class="text-center text-slate-500 text-sm mt-4">Your data stays local — nothing is uploaded to any server</p>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="mainApp" class="hidden">
+  <!-- Header -->
+  <div class="glass sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="text-2xl">🏆</div>
+      <div>
+        <h1 class="text-lg font-bold text-white" id="headerName">100-Day Tracker</h1>
+        <p class="text-xs text-slate-400" id="headerDay">Loading...</p>
+      </div>
+    </div>
+    <div class="flex gap-3">
+      <button class="btn-success text-sm py-2 px-4" onclick="saveToExcel()">💾 Save Excel</button>
+      <button class="btn-primary text-sm py-2 px-4" onclick="changeFile()">📂 Change File</button>
+    </div>
+  </div>
+
+  <div class="max-w-5xl mx-auto p-6">
+    <!-- Day Progress Banner -->
+    <div class="stat-card mb-6">
+      <div class="flex flex-wrap gap-4 items-center justify-between mb-4">
+        <div>
+          <p class="text-slate-300 text-sm">Today</p>
+          <h2 class="text-2xl font-bold text-white" id="todayDate">—</h2>
+        </div>
+        <div class="text-center">
+          <p class="text-slate-300 text-sm">Day</p>
+          <h2 class="text-3xl font-bold text-indigo-400" id="dayNumber">—</h2>
+        </div>
+        <div class="text-center">
+          <p class="text-slate-300 text-sm">Calories Target</p>
+          <h2 class="text-xl font-bold text-emerald-400" id="calorieTarget">2627 kcal</h2>
+        </div>
+        <div class="text-center">
+          <p class="text-slate-300 text-sm">Phase</p>
+          <h2 class="text-lg font-bold text-purple-400" id="currentPhase">—</h2>
+        </div>
+        <div class="text-center">
+          <p class="text-slate-300 text-sm">Days Left</p>
+          <h2 class="text-2xl font-bold text-amber-400" id="daysLeft">—</h2>
+        </div>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill bg-gradient-to-r from-indigo-500 to-purple-500" id="dayProgress" style="width:0%"></div>
+      </div>
+      <p class="text-xs text-slate-400 mt-1 text-right" id="progressLabel">0 / 100 days</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex gap-2 mb-6 flex-wrap">
+      <button class="tab-btn active px-5 py-2.5 rounded-xl font-semibold text-sm glass" onclick="showTab('food')">🥗 Food</button>
+      <button class="tab-btn px-5 py-2.5 rounded-xl font-semibold text-sm glass text-slate-300" onclick="showTab('exercise')">🏋️ Exercise</button>
+      <button class="tab-btn px-5 py-2.5 rounded-xl font-semibold text-sm glass text-slate-300" onclick="showTab('study')">📚 Study</button>
+      <button class="tab-btn px-5 py-2.5 rounded-xl font-semibold text-sm glass text-slate-300" onclick="showTab('progress')">📈 Progress</button>
+      <button class="tab-btn px-5 py-2.5 rounded-xl font-semibold text-sm glass text-slate-300" onclick="showTab('plan')">📋 My Plan</button>
+    </div>
+
+    <!-- FOOD TAB -->
+    <div id="tab-food">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Recommended Meals -->
+        <div class="glass rounded-2xl p-6">
+          <h3 class="font-bold text-lg mb-4 text-indigo-300">📖 Today's Meal Plan</h3>
+          <div id="recommendedMeals">
+            <p class="text-slate-400 text-sm">Loading meal plan...</p>
+          </div>
+        </div>
+
+        <!-- Log Actual Meals -->
+        <div class="glass rounded-2xl p-6">
+          <h3 class="font-bold text-lg mb-4 text-emerald-300">✏️ Log Today's Food</h3>
+
+          <div class="space-y-4">
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">🌅 Breakfast (kcal)</label>
+              <input id="inp_breakfast" type="number" placeholder="e.g. 370" class="input-field"/>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">☀️ Lunch (kcal)</label>
+              <input id="inp_lunch" type="number" placeholder="e.g. 490" class="input-field"/>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">🌙 Dinner (kcal)</label>
+              <input id="inp_dinner" type="number" placeholder="e.g. 440" class="input-field"/>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">🍎 Snacks (kcal)</label>
+              <input id="inp_snacks" type="number" placeholder="e.g. 150" class="input-field"/>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">💧 Water (Litres)</label>
+              <input id="inp_water" type="number" step="0.1" placeholder="e.g. 3.5" class="input-field"/>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">💪 Protein (g)</label>
+              <input id="inp_protein" type="number" placeholder="e.g. 75" class="input-field"/>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">🥛 Whey Protein (20g)</label>
+              <select id="inp_whey" class="input-field">
+                <option value="">— Select —</option>
+                <option value="✓">✓ Done</option>
+                <option value="✗">✗ Skipped</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">🥚 15 Egg Whites</label>
+              <select id="inp_eggs" class="input-field">
+                <option value="">— Select —</option>
+                <option value="✓">✓ Done</option>
+                <option value="✗">✗ Skipped</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">📝 Notes / Mood</label>
+              <input id="inp_notes_food" type="text" placeholder="How are you feeling today?" class="input-field"/>
+            </div>
+          </div>
+
+          <!-- Calorie Live Counter -->
+          <div class="mt-5 glass rounded-xl p-4">
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-sm text-slate-300">Total Calories</span>
+              <span id="liveCalories" class="font-bold text-lg text-white">0 / 2627 kcal</span>
+            </div>
+            <div class="progress-bar">
+              <div id="calorieProgressBar" class="progress-fill bg-gradient-to-r from-emerald-500 to-green-400" style="width:0%"></div>
+            </div>
+            <p id="calorieStatus" class="text-xs text-slate-400 mt-1"></p>
+          </div>
+
+          <button class="btn-primary w-full mt-4" onclick="saveFoodLog()">Save Food Log</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXERCISE TAB -->
+    <div id="tab-exercise" class="hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Today's Exercise Plan -->
+        <div class="glass rounded-2xl p-6">
+          <h3 class="font-bold text-lg mb-4 text-purple-300">📋 Today's Workout Plan</h3>
+          <div id="todayExercisePlan">
+            <p class="text-slate-400 text-sm">Loading exercise plan...</p>
+          </div>
+        </div>
+
+        <!-- Log Exercise -->
+        <div class="glass rounded-2xl p-6">
+          <h3 class="font-bold text-lg mb-4 text-emerald-300">✏️ Log Today's Exercise</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">🏋️ Exercise Type</label>
+              <input id="inp_exType" type="text" placeholder="e.g. Chest + Shoulders + Triceps" class="input-field"/>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">⏱️ Duration (min)</label>
+              <input id="inp_exDuration" type="number" placeholder="e.g. 60" class="input-field"/>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">🔥 Calories Burned</label>
+              <input id="inp_exCalories" type="number" placeholder="e.g. 580" class="input-field"/>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">👟 Steps</label>
+              <input id="inp_exSteps" type="number" placeholder="e.g. 12000" class="input-field"/>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">❤️ Avg Heart Rate (bpm)</label>
+              <input id="inp_exHR" type="number" placeholder="e.g. 140" class="input-field"/>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">⚡ Intensity (1–5)</label>
+              <select id="inp_exIntensity" class="input-field">
+                <option value="">— Select —</option>
+                <option value="1">1 — Light</option>
+                <option value="2">2 — Easy</option>
+                <option value="3">3 — Moderate</option>
+                <option value="4">4 — Hard</option>
+                <option value="5">5 — Max Effort</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">✅ Gym Done? (60 min)</label>
+              <select id="inp_gymDone" class="input-field">
+                <option value="">— Select —</option>
+                <option value="✓">✓ Done</option>
+                <option value="✗">✗ Skipped</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">⚖️ Body Weight (kg)</label>
+              <input id="inp_bodyWeight" type="number" step="0.1" placeholder="e.g. 96.5" class="input-field"/>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">📝 Notes</label>
+              <input id="inp_exNotes" type="text" placeholder="How was the workout?" class="input-field"/>
+            </div>
+          </div>
+          <button class="btn-primary w-full mt-5" onclick="saveExerciseLog()">Save Exercise Log</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STUDY TAB -->
+    <div id="tab-study" class="hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Study Log Form -->
+        <div class="glass rounded-2xl p-6">
+          <h3 class="font-bold text-lg mb-4 text-blue-300">📚 Log Study Session</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">📖 Subject / Topic</label>
+              <input id="inp_subject" type="text" placeholder="e.g. Data Structures, React, Python..." class="input-field"/>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">⏰ Hours Studied</label>
+              <input id="inp_studyHours" type="number" step="0.5" placeholder="e.g. 2.5" class="input-field"/>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">🕐 Start Time</label>
+              <input id="inp_studyStart" type="time" class="input-field"/>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">🕔 End Time</label>
+              <input id="inp_studyEnd" type="time" class="input-field"/>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">🎯 Topics Covered</label>
+              <textarea id="inp_topics" rows="3" placeholder="What did you learn today?" class="input-field" style="resize:vertical"></textarea>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">🌟 Productivity (1–5)</label>
+              <select id="inp_productivity" class="input-field">
+                <option value="">— Select —</option>
+                <option value="1">1 — Very Distracted</option>
+                <option value="2">2 — Low Focus</option>
+                <option value="3">3 — Average</option>
+                <option value="4">4 — Good Focus</option>
+                <option value="5">5 — Deep Work</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300 block mb-1">📝 Notes</label>
+              <input id="inp_studyNotes" type="text" placeholder="Key takeaways or blockers" class="input-field"/>
+            </div>
+          </div>
+          <button class="btn-primary w-full mt-5" onclick="addStudySession()">➕ Add Session</button>
+        </div>
+
+        <!-- Today's Study Summary -->
+        <div class="glass rounded-2xl p-6">
+          <h3 class="font-bold text-lg mb-2 text-blue-300">📊 Today's Study Summary</h3>
+          <div id="studySummary" class="mb-4">
+            <div class="stat-card text-center">
+              <p class="text-slate-400 text-sm">Total Hours Today</p>
+              <p class="text-3xl font-bold text-blue-400" id="totalStudyHours">0h</p>
+            </div>
+          </div>
+          <div id="studyList">
+            <p class="text-slate-500 text-sm text-center py-4">No study sessions logged yet today</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROGRESS TAB -->
+    <div id="tab-progress" class="hidden">
+      <div class="glass rounded-2xl p-6 mb-6">
+        <h3 class="font-bold text-lg mb-4 text-amber-300">⚖️ Log Today's Weight</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-sm text-slate-300 block mb-1">Weight (kg)</label>
+            <input id="inp_weight" type="number" step="0.1" placeholder="e.g. 96.4" class="input-field"/>
+          </div>
+          <div>
+            <label class="text-sm text-slate-300 block mb-1">Daily Steps</label>
+            <input id="inp_steps" type="number" placeholder="e.g. 12000" class="input-field"/>
+          </div>
+        </div>
+        <button class="btn-primary mt-4" onclick="saveProgressLog()">Save Progress</button>
+      </div>
+
+      <div class="glass rounded-2xl p-6">
+        <h3 class="font-bold text-lg mb-4 text-slate-300">📈 Weight History</h3>
+        <div id="weightHistory">
+          <p class="text-slate-500 text-sm text-center py-4">No weight entries yet</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- PLAN TAB -->
+    <div id="tab-plan" class="hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="glass rounded-2xl p-6">
+          <h3 class="font-bold text-lg mb-4 text-indigo-300">🎯 My Stats & Goal</h3>
+          <div id="myStats" class="space-y-3">
+            <p class="text-slate-400 text-sm">Loading stats...</p>
+          </div>
+        </div>
+        <div class="glass rounded-2xl p-6">
+          <h3 class="font-bold text-lg mb-4 text-purple-300">🏋️ Weekly Exercise Plan</h3>
+          <div id="weeklyExPlan" class="space-y-2">
+            <p class="text-slate-400 text-sm">Loading exercise plan...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let workbook = null;
+let todayRow = null;
+let studySessions = {};
+const TODAY = new Date();
+const TODAY_STR = TODAY.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'}).replace(/ /g, ' ');
+
+function showNotification(msg, type='success') {
+  const el = document.createElement('div');
+  el.className = `notification ${type === 'success' ? 'bg-emerald-600' : 'bg-red-600'} text-white`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+function loadFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      workbook = XLSX.read(e.target.result, {type:'array', cellDates:true});
+      initApp();
+    } catch(err) {
+      document.getElementById('uploadError').textContent = 'Error reading file: ' + err.message;
+      document.getElementById('uploadError').classList.remove('hidden');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseExcelDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) return val;
+  if (typeof val === 'number') return XLSX.SSF.parse_date_code(val);
+  return null;
+}
+
+function initApp() {
+  loadStudySessions();
+
+  document.getElementById('uploadScreen').classList.add('hidden');
+  document.getElementById('mainApp').classList.remove('hidden');
+
+  // Find today's row in Food Tracker
+  const foodSheet = workbook.Sheets['📋 Food Tracker (100 Days)'];
+  const foodData = XLSX.utils.sheet_to_json(foodSheet, {header:1, defval:null});
+
+  const todayFmt = formatDateForMatch(TODAY);
+  let dayNum = null;
+  let rowIdx = null;
+
+  for (let i = 4; i < foodData.length; i++) {
+    const row = foodData[i];
+    if (!row || !row[1]) continue;
+    const cellDate = row[1];
+    const cellStr = typeof cellDate === 'string' ? cellDate : (cellDate instanceof Date ? formatDateForMatch(cellDate) : String(cellDate));
+    if (cellStr === todayFmt || cellStr.includes('27 Mar') || matchDate(cellStr, TODAY)) {
+      dayNum = row[0];
+      rowIdx = i;
+      todayRow = {foodRowIdx: i, day: dayNum};
+      break;
+    }
+  }
+
+  // Find exercise row
+  const exSheet = workbook.Sheets['🏃 Exercise Tracker (100 Days)'];
+  const exData = XLSX.utils.sheet_to_json(exSheet, {header:1, defval:null});
+  for (let i = 4; i < exData.length; i++) {
+    const row = exData[i];
+    if (!row || !row[1]) continue;
+    const cellStr = typeof row[1] === 'string' ? row[1] : (row[1] instanceof Date ? formatDateForMatch(row[1]) : String(row[1]));
+    if (matchDate(cellStr, TODAY)) {
+      if (todayRow) todayRow.exRowIdx = i;
+      break;
+    }
+  }
+
+  // Find progress row
+  const progSheet = workbook.Sheets['📈 Progress Tracker'];
+  const progData = XLSX.utils.sheet_to_json(progSheet, {header:1, defval:null});
+  for (let i = 4; i < progData.length; i++) {
+    const row = progData[i];
+    if (!row || !row[1]) continue;
+    const cellStr = typeof row[1] === 'string' ? row[1] : (row[1] instanceof Date ? formatDateForMatch(row[1]) : String(row[1]));
+    if (matchDate(cellStr, TODAY)) {
+      if (todayRow) todayRow.progRowIdx = i;
+      break;
+    }
+  }
+
+  if (!todayRow) todayRow = {foodRowIdx: null, exRowIdx: null, progRowIdx: null, day: '?'};
+
+  updateHeader();
+  loadMealPlan();
+  loadExercisePlan();
+  loadExistingFoodData();
+  loadExistingExerciseData();
+  loadExistingProgressData();
+  loadMyStats();
+  renderWeightHistory();
+  renderStudyList();
+  setupCalorieWatcher();
+}
+
+function formatDateForMatch(d) {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${String(d.getDate()).padStart(2,'0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function matchDate(cellStr, d) {
+  if (!cellStr) return false;
+  const s = String(cellStr);
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const day = String(d.getDate()).padStart(2,'0');
+  const month = months[d.getMonth()];
+  const year = d.getFullYear();
+  return s.includes(day) && s.includes(month) && s.includes(String(year));
+}
+
+function updateHeader() {
+  const dayNum = todayRow ? todayRow.day : '?';
+  document.getElementById('headerName').textContent = "Mohit's 100-Day Tracker";
+  document.getElementById('headerDay').textContent = `Day ${dayNum} of 100`;
+  document.getElementById('todayDate').textContent = TODAY.toLocaleDateString('en-IN', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+  document.getElementById('dayNumber').textContent = dayNum;
+
+  const dayN = parseInt(dayNum) || 1;
+  const daysLeft = 100 - dayN;
+  document.getElementById('daysLeft').textContent = daysLeft > 0 ? daysLeft : 0;
+
+  const pct = Math.min((dayN / 100) * 100, 100);
+  document.getElementById('dayProgress').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent = `${dayN} / 100 days`;
+
+  // Phase
+  let phase = 'Phase 1 – Foundation';
+  if (dayN > 25 && dayN <= 50) phase = 'Phase 2 – Build';
+  else if (dayN > 50 && dayN <= 75) phase = 'Phase 3 – Push';
+  else if (dayN > 75) phase = 'Phase 4 – Peak';
+  document.getElementById('currentPhase').textContent = phase;
+}
+
+function getDayOfWeek() {
+  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  return days[TODAY.getDay()];
+}
+
+function loadMealPlan() {
+  const sheet = workbook.Sheets['🥗 Weekly Meal Plan'];
+  const data = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null});
+  const dow = getDayOfWeek();
+
+  let todayMeal = null;
+  for (let i = 4; i < data.length; i++) {
+    if (data[i] && String(data[i][0]).trim() === dow) {
+      todayMeal = data[i];
+      break;
+    }
+  }
+
+  const container = document.getElementById('recommendedMeals');
+  if (!todayMeal) {
+    container.innerHTML = '<p class="text-slate-400 text-sm">No meal plan found for today.</p>';
+    return;
+  }
+
+  const truncate = (s, n=50) => s ? String(s).substring(0, n) + (String(s).length > n ? '...' : '') : '—';
+
+  container.innerHTML = `
+    <div class="space-y-3">
+      <div class="meal-card">
+        <div class="flex justify-between items-start gap-2">
+          <div>
+            <span class="tag bg-amber-500/20 text-amber-300">🌅 Breakfast</span>
+            <p class="text-sm text-white mt-1 font-medium">${truncate(todayMeal[1], 60)}</p>
+          </div>
+          <div class="text-right shrink-0">
+            <p class="text-emerald-400 font-bold">${todayMeal[2] || '—'} kcal</p>
+            <p class="text-xs text-slate-400">~${todayMeal[3] || '—'}g protein</p>
+          </div>
+        </div>
+      </div>
+      <div class="meal-card">
+        <div class="flex justify-between items-start gap-2">
+          <div>
+            <span class="tag bg-yellow-500/20 text-yellow-300">☀️ Lunch</span>
+            <p class="text-sm text-white mt-1 font-medium">${truncate(todayMeal[4], 60)}</p>
+          </div>
+          <div class="text-right shrink-0">
+            <p class="text-emerald-400 font-bold">${todayMeal[5] || '—'} kcal</p>
+            <p class="text-xs text-slate-400">~${todayMeal[6] || '—'}g protein</p>
+          </div>
+        </div>
+      </div>
+      <div class="meal-card">
+        <div class="flex justify-between items-start gap-2">
+          <div>
+            <span class="tag bg-indigo-500/20 text-indigo-300">🌙 Dinner</span>
+            <p class="text-sm text-white mt-1 font-medium">${truncate(todayMeal[8], 60)}</p>
+          </div>
+          <div class="text-right shrink-0">
+            <p class="text-emerald-400 font-bold">${todayMeal[9] || '—'} kcal</p>
+            <p class="text-xs text-slate-400">~${todayMeal[10] || '—'}g protein</p>
+          </div>
+        </div>
+      </div>
+      <div class="meal-card">
+        <div class="flex justify-between items-start gap-2">
+          <div>
+            <span class="tag bg-pink-500/20 text-pink-300">🍎 Snack</span>
+            <p class="text-sm text-white mt-1">${truncate(todayMeal[11], 60)}</p>
+          </div>
+        </div>
+      </div>
+      <div class="meal-card border-purple-500/30">
+        <p class="text-xs text-slate-400 font-semibold mb-1">💊 Supplements</p>
+        <p class="text-xs text-purple-300">${truncate(todayMeal[12], 70)}</p>
+      </div>
+    </div>
+  `;
+}
+
+function loadExercisePlan() {
+  const sheet = workbook.Sheets['🏋️ Weekly Exercise Plan'];
+  const data = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null});
+  const dow = getDayOfWeek();
+
+  let plan = null;
+  for (let i = 4; i < data.length; i++) {
+    if (data[i] && String(data[i][0]).trim() === dow) {
+      plan = data[i];
+      break;
+    }
+  }
+
+  const container = document.getElementById('todayExercisePlan');
+  const weeklyContainer = document.getElementById('weeklyExPlan');
+
+  if (plan) {
+    container.innerHTML = `
+      <div class="space-y-3">
+        <div class="meal-card">
+          <p class="text-purple-300 font-semibold text-sm">${plan[1] || '—'}</p>
+          <p class="text-sm text-white mt-1">${plan[2] || '—'}</p>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="meal-card text-center">
+            <p class="text-xs text-slate-400">Duration</p>
+            <p class="text-emerald-400 font-bold">${plan[3] ? String(plan[3]).substring(0,30) : '60 min'}</p>
+          </div>
+          <div class="meal-card text-center">
+            <p class="text-xs text-slate-400">Est. Burn</p>
+            <p class="text-orange-400 font-bold">${plan[4] || '—'} kcal</p>
+          </div>
+        </div>
+        <div class="meal-card">
+          <p class="text-xs text-slate-400">Difficulty: ${plan[5] || '—'}</p>
+          <p class="text-xs text-slate-300 mt-1">💡 ${plan[7] ? String(plan[7]).substring(0,80) : ''}</p>
+        </div>
+      </div>
+    `;
+    // Prefill exercise type
+    document.getElementById('inp_exType').placeholder = String(plan[1] || '');
+    if (plan[4]) document.getElementById('inp_exCalories').placeholder = String(plan[4]);
+  }
+
+  // Weekly plan
+  const weeklyData = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null});
+  const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  let html = '';
+  for (const day of days) {
+    for (let i = 4; i < weeklyData.length; i++) {
+      if (weeklyData[i] && String(weeklyData[i][0]).trim() === day) {
+        const p = weeklyData[i];
+        const isToday = day === dow;
+        html += `<div class="meal-card ${isToday ? 'border-purple-500/50' : ''}">
+          <div class="flex justify-between">
+            <div>
+              <span class="text-xs font-bold ${isToday ? 'text-purple-400' : 'text-slate-400'}">${day}${isToday ? ' ← Today' : ''}</span>
+              <p class="text-sm text-white">${p[1] || '—'}</p>
+            </div>
+            <span class="text-xs text-orange-400 shrink-0">${p[4] || '—'} kcal</span>
+          </div>
+        </div>`;
+        break;
+      }
+    }
+  }
+  weeklyContainer.innerHTML = html || '<p class="text-slate-400 text-sm">No exercise plan found.</p>';
+}
+
+function loadExistingFoodData() {
+  if (!todayRow || todayRow.foodRowIdx === null) return;
+  const sheet = workbook.Sheets['📋 Food Tracker (100 Days)'];
+  const data = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null});
+  const row = data[todayRow.foodRowIdx];
+  if (!row) return;
+
+  if (row[2]) document.getElementById('inp_breakfast').value = row[2];
+  if (row[3]) document.getElementById('inp_lunch').value = row[3];
+  if (row[4]) document.getElementById('inp_dinner').value = row[4];
+  if (row[5]) document.getElementById('inp_snacks').value = row[5];
+  if (row[9]) document.getElementById('inp_protein').value = row[9];
+  if (row[10]) document.getElementById('inp_water').value = row[10];
+  if (row[11]) document.getElementById('inp_notes_food').value = row[11] !== null ? row[11] : '';
+  if (row[13]) document.getElementById('inp_whey').value = String(row[13]).includes('✓') ? '✓' : (String(row[13]).includes('✗') ? '✗' : '');
+  if (row[14]) document.getElementById('inp_eggs').value = String(row[14]).includes('✓') ? '✓' : (String(row[14]).includes('✗') ? '✗' : '');
+}
+
+function loadExistingExerciseData() {
+  if (!todayRow || !todayRow.exRowIdx) return;
+  const sheet = workbook.Sheets['🏃 Exercise Tracker (100 Days)'];
+  const data = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null});
+  const row = data[todayRow.exRowIdx];
+  if (!row) return;
+
+  if (row[2]) document.getElementById('inp_exType').value = row[2];
+  if (row[3]) document.getElementById('inp_exDuration').value = row[3];
+  if (row[4]) document.getElementById('inp_exCalories').value = row[4];
+  if (row[5]) document.getElementById('inp_exSteps').value = row[5];
+  if (row[6]) document.getElementById('inp_exHR').value = row[6];
+  if (row[7]) document.getElementById('inp_exIntensity').value = row[7];
+  if (row[8]) document.getElementById('inp_gymDone').value = String(row[8]).includes('✓') ? '✓' : (String(row[8]).includes('✗') ? '✗' : '');
+  if (row[9]) document.getElementById('inp_bodyWeight').value = row[9];
+  if (row[10]) document.getElementById('inp_exNotes').value = row[10];
+}
+
+function loadExistingProgressData() {
+  if (!todayRow || !todayRow.progRowIdx) return;
+  const sheet = workbook.Sheets['📈 Progress Tracker'];
+  const data = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null});
+  const row = data[todayRow.progRowIdx];
+  if (!row) return;
+
+  if (row[3]) document.getElementById('inp_weight').value = row[3];
+  if (row[8]) document.getElementById('inp_steps').value = row[8];
+}
+
+function loadMyStats() {
+  const sheet = workbook.Sheets['🎯 My Stats & Plan'];
+  const data = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null});
+  const container = document.getElementById('myStats');
+
+  const stats = [];
+  for (let i = 3; i < Math.min(data.length, 37); i++) {
+    const row = data[i];
+    if (!row) continue;
+    for (let c = 0; c < row.length; c++) {
+      if (row[c] && row[c+1] && typeof row[c] === 'string' && !String(row[c]).startsWith('🔥') && !String(row[c]).startsWith('📏') && !String(row[c]).startsWith('💊')) {
+        const label = String(row[c]).trim();
+        const val = String(row[c+1]).trim();
+        if (label && val && label.length > 3 && label.length < 50 && val.length < 50) {
+          stats.push({label, val});
+          c++;
+        }
+      }
+    }
+  }
+
+  const important = stats.filter(s =>
+    s.label.includes('Height') || s.label.includes('Weight') || s.label.includes('BMI') ||
+    s.label.includes('Age') || s.label.includes('Target') || s.label.includes('Calorie') ||
+    s.label.includes('Protein') || s.label.includes('BMR') || s.label.includes('TDEE') ||
+    s.label.includes('Deficit') || s.label.includes('Supplement')
+  ).slice(0, 12);
+
+  container.innerHTML = important.map(s => `
+    <div class="flex justify-between items-center py-2 border-b border-white/5">
+      <span class="text-sm text-slate-400">${s.label}</span>
+      <span class="text-sm font-semibold text-white">${s.val}</span>
+    </div>
+  `).join('') || '<p class="text-slate-400 text-sm">Could not load stats.</p>';
+}
+
+function setupCalorieWatcher() {
+  ['inp_breakfast','inp_lunch','inp_dinner','inp_snacks'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updateCalorieCounter);
+  });
+  updateCalorieCounter();
+}
+
+function updateCalorieCounter() {
+  const b = parseFloat(document.getElementById('inp_breakfast').value) || 0;
+  const l = parseFloat(document.getElementById('inp_lunch').value) || 0;
+  const d = parseFloat(document.getElementById('inp_dinner').value) || 0;
+  const s = parseFloat(document.getElementById('inp_snacks').value) || 0;
+  const total = b + l + d + s;
+  const target = 2627;
+  const pct = Math.min((total / target) * 100, 110);
+
+  document.getElementById('liveCalories').textContent = `${total} / ${target} kcal`;
+  document.getElementById('calorieProgressBar').style.width = pct + '%';
+
+  const bar = document.getElementById('calorieProgressBar');
+  if (total < target * 0.7) {
+    bar.className = 'progress-fill bg-gradient-to-r from-blue-500 to-cyan-400';
+    document.getElementById('calorieStatus').textContent = `${target - total} kcal remaining`;
+  } else if (total <= target * 1.05) {
+    bar.className = 'progress-fill bg-gradient-to-r from-emerald-500 to-green-400';
+    document.getElementById('calorieStatus').textContent = '✅ On target!';
+  } else {
+    bar.className = 'progress-fill bg-gradient-to-r from-red-500 to-orange-400';
+    document.getElementById('calorieStatus').textContent = `⚠️ ${total - target} kcal over target`;
+  }
+}
+
+function setSheetCell(sheetName, rowIdx, colIdx, value) {
+  const sheet = workbook.Sheets[sheetName];
+  const cellRef = XLSX.utils.encode_cell({r: rowIdx, c: colIdx});
+  if (value === null || value === undefined || value === '') {
+    delete sheet[cellRef];
+    return;
+  }
+  const existing = sheet[cellRef];
+  sheet[cellRef] = { ...existing, v: value, t: typeof value === 'number' ? 'n' : 's' };
+}
+
+function saveFoodLog() {
+  if (!todayRow || todayRow.foodRowIdx === null) {
+    showNotification('Could not find today in tracker. Check the date.', 'error');
+    return;
+  }
+  const ri = todayRow.foodRowIdx;
+  const b = parseFloat(document.getElementById('inp_breakfast').value) || null;
+  const l = parseFloat(document.getElementById('inp_lunch').value) || null;
+  const d = parseFloat(document.getElementById('inp_dinner').value) || null;
+  const s = parseFloat(document.getElementById('inp_snacks').value) || null;
+
+  setSheetCell('📋 Food Tracker (100 Days)', ri, 2, b);
+  setSheetCell('📋 Food Tracker (100 Days)', ri, 3, l);
+  setSheetCell('📋 Food Tracker (100 Days)', ri, 4, d);
+  setSheetCell('📋 Food Tracker (100 Days)', ri, 5, s);
+
+  const total = (b||0)+(l||0)+(d||0)+(s||0);
+  if (total > 0) setSheetCell('📋 Food Tracker (100 Days)', ri, 6, total);
+
+  const protein = parseFloat(document.getElementById('inp_protein').value) || null;
+  const water = parseFloat(document.getElementById('inp_water').value) || null;
+  const notes = document.getElementById('inp_notes_food').value || null;
+  const whey = document.getElementById('inp_whey').value || null;
+  const eggs = document.getElementById('inp_eggs').value || null;
+
+  setSheetCell('📋 Food Tracker (100 Days)', ri, 9, protein);
+  setSheetCell('📋 Food Tracker (100 Days)', ri, 10, water);
+  setSheetCell('📋 Food Tracker (100 Days)', ri, 12, notes);
+  setSheetCell('📋 Food Tracker (100 Days)', ri, 13, whey);
+  setSheetCell('📋 Food Tracker (100 Days)', ri, 14, eggs);
+
+  // Also update exercise done column
+  const gymDone = document.getElementById('inp_gymDone').value;
+  if (gymDone) setSheetCell('📋 Food Tracker (100 Days)', ri, 11, gymDone);
+
+  showNotification('✅ Food log saved!');
+  updateCalorieCounter();
+}
+
+function saveExerciseLog() {
+  if (!todayRow || !todayRow.exRowIdx) {
+    showNotification('Could not find today in exercise tracker.', 'error');
+    return;
+  }
+  const ri = todayRow.exRowIdx;
+
+  setSheetCell('🏃 Exercise Tracker (100 Days)', ri, 2, document.getElementById('inp_exType').value || null);
+  setSheetCell('🏃 Exercise Tracker (100 Days)', ri, 3, parseFloat(document.getElementById('inp_exDuration').value) || null);
+  setSheetCell('🏃 Exercise Tracker (100 Days)', ri, 4, parseFloat(document.getElementById('inp_exCalories').value) || null);
+  setSheetCell('🏃 Exercise Tracker (100 Days)', ri, 5, parseFloat(document.getElementById('inp_exSteps').value) || null);
+  setSheetCell('🏃 Exercise Tracker (100 Days)', ri, 6, parseFloat(document.getElementById('inp_exHR').value) || null);
+  setSheetCell('🏃 Exercise Tracker (100 Days)', ri, 7, parseFloat(document.getElementById('inp_exIntensity').value) || null);
+  setSheetCell('🏃 Exercise Tracker (100 Days)', ri, 8, document.getElementById('inp_gymDone').value || null);
+  setSheetCell('🏃 Exercise Tracker (100 Days)', ri, 9, parseFloat(document.getElementById('inp_bodyWeight').value) || null);
+  setSheetCell('🏃 Exercise Tracker (100 Days)', ri, 10, document.getElementById('inp_exNotes').value || null);
+
+  showNotification('✅ Exercise log saved!');
+}
+
+function saveProgressLog() {
+  if (!todayRow || !todayRow.progRowIdx) {
+    showNotification('Could not find today in progress tracker.', 'error');
+    return;
+  }
+  const ri = todayRow.progRowIdx;
+  setSheetCell('📈 Progress Tracker', ri, 3, parseFloat(document.getElementById('inp_weight').value) || null);
+  setSheetCell('📈 Progress Tracker', ri, 8, parseFloat(document.getElementById('inp_steps').value) || null);
+
+  showNotification('✅ Progress saved!');
+  renderWeightHistory();
+}
+
+function renderWeightHistory() {
+  const sheet = workbook.Sheets['📈 Progress Tracker'];
+  if (!sheet) return;
+  const data = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null});
+
+  let rows = [];
+  for (let i = 4; i < data.length; i++) {
+    const row = data[i];
+    if (!row || !row[3]) continue;
+    rows.push({day: row[0], date: row[1], weight: row[3], steps: row[8], milestone: row[7]});
+  }
+
+  const container = document.getElementById('weightHistory');
+  if (rows.length === 0) {
+    container.innerHTML = '<p class="text-slate-500 text-sm text-center py-4">No weight entries yet</p>';
+    return;
+  }
+
+  // Show last 10
+  const recent = rows.slice(-10).reverse();
+  container.innerHTML = `
+    <div class="space-y-2">
+      ${recent.map(r => `
+        <div class="flex items-center justify-between py-2 border-b border-white/5">
+          <div>
+            <span class="text-xs text-slate-400">Day ${r.day}</span>
+            <p class="text-sm text-white">${r.date || ''}</p>
+            ${r.milestone ? `<span class="text-xs text-amber-400">${r.milestone}</span>` : ''}
+          </div>
+          <div class="text-right">
+            <p class="font-bold text-emerald-400">${r.weight} kg</p>
+            ${r.steps ? `<p class="text-xs text-slate-400">${Number(r.steps).toLocaleString()} steps</p>` : ''}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// Study Tracker
+function loadStudySessions() {
+  const key = 'study_' + TODAY.toISOString().split('T')[0];
+  const saved = localStorage.getItem(key);
+  studySessions[key] = saved ? JSON.parse(saved) : [];
+}
+
+function getTodayStudyKey() {
+  return 'study_' + TODAY.toISOString().split('T')[0];
+}
+
+function addStudySession() {
+  const subject = document.getElementById('inp_subject').value.trim();
+  const hours = parseFloat(document.getElementById('inp_studyHours').value) || 0;
+
+  if (!subject) { showNotification('Please enter a subject', 'error'); return; }
+  if (!hours) { showNotification('Please enter hours studied', 'error'); return; }
+
+  const session = {
+    id: Date.now(),
+    subject,
+    hours,
+    start: document.getElementById('inp_studyStart').value,
+    end: document.getElementById('inp_studyEnd').value,
+    topics: document.getElementById('inp_topics').value,
+    productivity: document.getElementById('inp_productivity').value,
+    notes: document.getElementById('inp_studyNotes').value
+  };
+
+  const key = getTodayStudyKey();
+  if (!studySessions[key]) studySessions[key] = [];
+  studySessions[key].push(session);
+  localStorage.setItem(key, JSON.stringify(studySessions[key]));
+
+  // Clear form
+  ['inp_subject','inp_studyHours','inp_studyStart','inp_studyEnd','inp_topics','inp_studyNotes'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('inp_productivity').value = '';
+
+  renderStudyList();
+  showNotification('✅ Study session added!');
+}
+
+function deleteStudySession(id) {
+  const key = getTodayStudyKey();
+  studySessions[key] = studySessions[key].filter(s => s.id !== id);
+  localStorage.setItem(key, JSON.stringify(studySessions[key]));
+  renderStudyList();
+}
+
+function renderStudyList() {
+  const key = getTodayStudyKey();
+  const sessions = studySessions[key] || [];
+  const totalHours = sessions.reduce((sum, s) => sum + (s.hours || 0), 0);
+
+  document.getElementById('totalStudyHours').textContent = totalHours.toFixed(1) + 'h';
+
+  const container = document.getElementById('studyList');
+  if (sessions.length === 0) {
+    container.innerHTML = '<p class="text-slate-500 text-sm text-center py-4">No study sessions logged yet today</p>';
+    return;
+  }
+
+  const prodColors = ['','text-red-400','text-orange-400','text-yellow-400','text-emerald-400','text-cyan-400'];
+  const prodLabels = ['','Very Distracted','Low Focus','Average','Good Focus','Deep Work'];
+
+  container.innerHTML = sessions.map(s => `
+    <div class="study-entry">
+      <div class="flex justify-between items-start">
+        <div class="flex-1">
+          <p class="font-semibold text-white">${s.subject}</p>
+          <p class="text-sm text-blue-400 font-bold">${s.hours}h ${s.start && s.end ? `· ${s.start} – ${s.end}` : ''}</p>
+          ${s.topics ? `<p class="text-xs text-slate-400 mt-1">${s.topics}</p>` : ''}
+          ${s.productivity ? `<span class="text-xs ${prodColors[s.productivity]}">${prodLabels[s.productivity]}</span>` : ''}
+        </div>
+        <button onclick="deleteStudySession(${s.id})" class="text-red-400 hover:text-red-300 text-sm ml-2 shrink-0">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function saveToExcel() {
+  if (!workbook) { showNotification('No file loaded', 'error'); return; }
+
+  // Write study tracker to new sheet
+  const key = getTodayStudyKey();
+  const sessions = studySessions[key] || [];
+
+  // Add/update study sheet
+  const studySheetName = '📚 Study Tracker';
+  let studySheet = workbook.Sheets[studySheetName];
+
+  if (sessions.length > 0) {
+    // Check if sheet exists, if so add to it
+    let existingData = [];
+    if (studySheet) {
+      existingData = XLSX.utils.sheet_to_json(studySheet, {header:1, defval:null});
+    }
+
+    if (existingData.length === 0) {
+      existingData = [['📚 DAILY STUDY TRACKER  |  100-Day Transformation'],
+        [],
+        ['Date','Day','Subject','Hours','Start','End','Topics Covered','Productivity (1-5)','Notes']];
+    }
+
+    const todayDateStr = formatDateForMatch(TODAY);
+    const dayNum = todayRow ? todayRow.day : '?';
+
+    // Remove existing entries for today
+    existingData = existingData.filter((row, i) => i < 3 || !row || String(row[0]) !== todayDateStr);
+
+    sessions.forEach(s => {
+      existingData.push([todayDateStr, dayNum, s.subject, s.hours, s.start||'', s.end||'', s.topics||'', s.productivity||'', s.notes||'']);
+    });
+
+    const newSheet = XLSX.utils.aoa_to_sheet(existingData);
+    workbook.Sheets[studySheetName] = newSheet;
+    if (!workbook.SheetNames.includes(studySheetName)) {
+      workbook.SheetNames.push(studySheetName);
+    }
+  }
+
+  const wbOut = XLSX.write(workbook, {bookType:'xlsx', type:'array'});
+  const blob = new Blob([wbOut], {type:'application/octet-stream'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Daily_Tracker_Day${todayRow ? todayRow.day : '?'}_${TODAY.toISOString().split('T')[0]}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showNotification('✅ Excel file downloaded!');
+}
+
+function showTab(name) {
+  ['food','exercise','study','progress','plan'].forEach(t => {
+    document.getElementById('tab-' + t).classList.add('hidden');
+  });
+  document.getElementById('tab-' + name).classList.remove('hidden');
+
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.remove('active');
+    btn.classList.add('text-slate-300');
+  });
+  event.target.classList.add('active');
+  event.target.classList.remove('text-slate-300');
+}
+
+function changeFile() {
+  workbook = null;
+  document.getElementById('mainApp').classList.add('hidden');
+  document.getElementById('uploadScreen').classList.remove('hidden');
+  document.getElementById('fileInput').value = '';
+}
+
+// Drag and drop support
+const uploadZone = document.getElementById('uploadZone');
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor = '#6366f1'; });
+uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor = ''; });
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.style.borderColor = '';
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    document.getElementById('fileInput').files = dt.files;
+    loadFile(document.getElementById('fileInput'));
+  }
+});
+</script>
+</body>
+</html>
