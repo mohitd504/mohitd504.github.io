@@ -374,6 +374,62 @@ let todayRow = null;
 let studySessions = {};
 const TODAY = new Date();
 const TODAY_STR = TODAY.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'}).replace(/ /g, ' ');
+const STORAGE_KEY = 'tracker_wb';
+const INPUTS_KEY = 'tracker_inputs_' + TODAY.toISOString().split('T')[0];
+
+// Auto-save all inputs to localStorage
+let autoSaveTimer = null;
+function scheduleAutoSave() {
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(persistInputs, 600);
+}
+
+function persistInputs() {
+  const ids = ['inp_breakfast','inp_lunch','inp_dinner','inp_snacks','inp_protein','inp_water',
+    'inp_notes_food','inp_whey','inp_eggs','inp_exType','inp_exDuration','inp_exCalories',
+    'inp_exSteps','inp_exHR','inp_exIntensity','inp_gymDone','inp_bodyWeight','inp_exNotes',
+    'inp_weight','inp_steps'];
+  const data = {};
+  ids.forEach(id => { const el = document.getElementById(id); if (el) data[id] = el.value; });
+  localStorage.setItem(INPUTS_KEY, JSON.stringify(data));
+}
+
+function restoreInputs() {
+  const saved = localStorage.getItem(INPUTS_KEY);
+  if (!saved) return;
+  try {
+    const data = JSON.parse(saved);
+    Object.entries(data).forEach(([id, val]) => {
+      const el = document.getElementById(id);
+      if (el && val) el.value = val;
+    });
+  } catch(e) {}
+}
+
+function setupAutoSave() {
+  const ids = ['inp_breakfast','inp_lunch','inp_dinner','inp_snacks','inp_protein','inp_water',
+    'inp_notes_food','inp_whey','inp_eggs','inp_exType','inp_exDuration','inp_exCalories',
+    'inp_exSteps','inp_exHR','inp_exIntensity','inp_gymDone','inp_bodyWeight','inp_exNotes',
+    'inp_weight','inp_steps'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', scheduleAutoSave);
+    if (el) el.addEventListener('change', scheduleAutoSave);
+  });
+}
+
+// Load workbook from localStorage on startup
+window.addEventListener('load', () => {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    try {
+      workbook = XLSX.read(saved, {type:'base64', cellDates:true});
+      initApp();
+    } catch(e) {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }
+});
 
 function showNotification(msg, type='success') {
   const el = document.createElement('div');
@@ -390,6 +446,9 @@ function loadFile(input) {
   reader.onload = e => {
     try {
       workbook = XLSX.read(e.target.result, {type:'array', cellDates:true});
+      // Persist workbook so page refresh doesn't require re-upload
+      const wbB64 = XLSX.write(workbook, {bookType:'xlsx', type:'base64'});
+      localStorage.setItem(STORAGE_KEY, wbB64);
       initApp();
     } catch(err) {
       document.getElementById('uploadError').textContent = 'Error reading file: ' + err.message;
@@ -471,6 +530,9 @@ function initApp() {
   renderWeightHistory();
   renderStudyList();
   setupCalorieWatcher();
+  restoreInputs();
+  setupAutoSave();
+  updateCalorieCounter();
 }
 
 function formatDateForMatch(d) {
@@ -821,6 +883,9 @@ function saveFoodLog() {
   const gymDone = document.getElementById('inp_gymDone').value;
   if (gymDone) setSheetCell('📋 Food Tracker (100 Days)', ri, 11, gymDone);
 
+  persistInputs();
+  const wbB64 = XLSX.write(workbook, {bookType:'xlsx', type:'base64'});
+  localStorage.setItem(STORAGE_KEY, wbB64);
   showNotification('✅ Food log saved!');
   updateCalorieCounter();
 }
@@ -842,6 +907,9 @@ function saveExerciseLog() {
   setSheetCell('🏃 Exercise Tracker (100 Days)', ri, 9, parseFloat(document.getElementById('inp_bodyWeight').value) || null);
   setSheetCell('🏃 Exercise Tracker (100 Days)', ri, 10, document.getElementById('inp_exNotes').value || null);
 
+  persistInputs();
+  const wbB64 = XLSX.write(workbook, {bookType:'xlsx', type:'base64'});
+  localStorage.setItem(STORAGE_KEY, wbB64);
   showNotification('✅ Exercise log saved!');
 }
 
@@ -854,6 +922,9 @@ function saveProgressLog() {
   setSheetCell('📈 Progress Tracker', ri, 3, parseFloat(document.getElementById('inp_weight').value) || null);
   setSheetCell('📈 Progress Tracker', ri, 8, parseFloat(document.getElementById('inp_steps').value) || null);
 
+  persistInputs();
+  const wbB64 = XLSX.write(workbook, {bookType:'xlsx', type:'base64'});
+  localStorage.setItem(STORAGE_KEY, wbB64);
   showNotification('✅ Progress saved!');
   renderWeightHistory();
 }
@@ -1047,6 +1118,8 @@ function showTab(name) {
 
 function changeFile() {
   workbook = null;
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(INPUTS_KEY);
   document.getElementById('mainApp').classList.add('hidden');
   document.getElementById('uploadScreen').classList.remove('hidden');
   document.getElementById('fileInput').value = '';
