@@ -32,6 +32,13 @@
   .upload-zone:hover { border-color: #6366f1; background: rgba(99,102,241,0.05); }
   .notification { position: fixed; top: 20px; right: 20px; padding: 14px 20px; border-radius: 12px; font-weight: 600; z-index: 1000; animation: slideIn 0.3s ease; }
   @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  .day-tile { width: 30px; height: 30px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; cursor: default; transition: transform 0.1s; position: relative; }
+  .day-tile:hover { transform: scale(1.3); z-index: 10; }
+  .day-tile.done { background: linear-gradient(135deg, #10b981, #059669); color: white; }
+  .day-tile.today { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; box-shadow: 0 0 0 2px white; }
+  .day-tile.missed { background: rgba(239,68,68,0.5); color: #fca5a5; }
+  .day-tile.upcoming { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.3); }
+  .day-tile.milestone { box-shadow: 0 0 0 2px #f59e0b; }
 </style>
 </head>
 <body class="min-h-screen text-white">
@@ -103,6 +110,20 @@
         <div class="progress-fill bg-gradient-to-r from-indigo-500 to-purple-500" id="dayProgress" style="width:0%"></div>
       </div>
       <p class="text-xs text-slate-400 mt-1 text-right" id="progressLabel">0 / 100 days</p>
+    </div>
+
+    <!-- 100-Day Grid (always visible) -->
+    <div class="glass rounded-2xl p-6 mb-6">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-bold text-lg text-white">🗓️ 100-Day Journey</h3>
+        <div class="flex flex-wrap gap-3 text-xs text-slate-400">
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded" style="background:#10b981"></span> Done</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded ring-2 ring-white/60" style="background:#6366f1"></span> Today</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded" style="background:rgba(239,68,68,0.5)"></span> Missed</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded" style="background:rgba(255,255,255,0.07)"></span> Upcoming</span>
+        </div>
+      </div>
+      <div id="dayGrid" class="flex flex-wrap gap-1.5"></div>
     </div>
 
     <!-- Tabs -->
@@ -528,6 +549,7 @@ function initApp() {
   loadExistingProgressData();
   loadMyStats();
   renderWeightHistory();
+  render100DayGrid();
   renderStudyList();
   setupCalorieWatcher();
   restoreInputs();
@@ -927,6 +949,78 @@ function saveProgressLog() {
   localStorage.setItem(STORAGE_KEY, wbB64);
   showNotification('✅ Progress saved!');
   renderWeightHistory();
+  render100DayGrid();
+}
+
+function render100DayGrid() {
+  const container = document.getElementById('dayGrid');
+  if (!container || !workbook) return;
+
+  // Gather food & exercise data from sheets
+  const foodSheet = workbook.Sheets['📋 Food Tracker (100 Days)'];
+  const exSheet = workbook.Sheets['🏃 Exercise Tracker (100 Days)'];
+  const progSheet = workbook.Sheets['📈 Progress Tracker'];
+
+  const foodData = foodSheet ? XLSX.utils.sheet_to_json(foodSheet, {header:1, defval:null}) : [];
+  const exData = exSheet ? XLSX.utils.sheet_to_json(exSheet, {header:1, defval:null}) : [];
+  const progData = progSheet ? XLSX.utils.sheet_to_json(progSheet, {header:1, defval:null}) : [];
+
+  // Build lookup: day number → {hasFood, hasExercise, hasWeight, date, milestone}
+  const dayInfo = {};
+  for (let i = 4; i < foodData.length; i++) {
+    const row = foodData[i];
+    if (!row || !row[0]) continue;
+    const d = parseInt(row[0]);
+    if (!d) continue;
+    dayInfo[d] = dayInfo[d] || {};
+    dayInfo[d].date = row[1];
+    dayInfo[d].hasFood = !!(row[2] || row[3] || row[4]);
+  }
+  for (let i = 4; i < exData.length; i++) {
+    const row = exData[i];
+    if (!row || !row[0]) continue;
+    const d = parseInt(row[0]);
+    if (!d) continue;
+    dayInfo[d] = dayInfo[d] || {};
+    dayInfo[d].hasExercise = !!(row[2] || row[4]);
+    dayInfo[d].gymDone = row[12] && String(row[12]).includes('✓');
+  }
+  for (let i = 4; i < progData.length; i++) {
+    const row = progData[i];
+    if (!row || !row[0]) continue;
+    const d = parseInt(row[0]);
+    if (!d) continue;
+    dayInfo[d] = dayInfo[d] || {};
+    dayInfo[d].hasWeight = !!row[3];
+    if (row[7]) dayInfo[d].milestone = String(row[7]);
+  }
+
+  const currentDay = parseInt(todayRow?.day) || 1;
+  let html = '';
+
+  for (let d = 1; d <= 100; d++) {
+    const info = dayInfo[d] || {};
+    const isToday = d === currentDay;
+    const isPast = d < currentDay;
+    const isFuture = d > currentDay;
+    const done = isPast && (info.hasFood || info.hasExercise || info.hasWeight);
+    const missed = isPast && !done;
+    const isMilestone = info.milestone && info.milestone.length > 1;
+
+    let cls = 'day-tile ';
+    if (isToday) cls += 'today';
+    else if (done) cls += 'done';
+    else if (missed) cls += 'missed';
+    else cls += 'upcoming';
+    if (isMilestone) cls += ' milestone';
+
+    const tip = info.date
+      ? `Day ${d}: ${info.date}${info.milestone ? ' · ' + info.milestone : ''}${info.hasFood ? ' · 🥗' : ''}${info.gymDone ? ' · 🏋️' : ''}${info.hasWeight ? ' · ⚖️' : ''}`
+      : `Day ${d}`;
+
+    html += `<div class="${cls}" title="${tip}">${d}</div>`;
+  }
+  container.innerHTML = html;
 }
 
 function renderWeightHistory() {
